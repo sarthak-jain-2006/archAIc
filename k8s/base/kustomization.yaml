@@ -5,9 +5,9 @@ namespace: archaics
 
 resources:
   - namespace.yaml
-  - auth/kustomization.yaml
-  - db/kustomization.yaml
-  - product/kustomization.yaml
+  - auth
+  - db
+  - product
 
 secretGenerator:
   - name: archaics-secrets

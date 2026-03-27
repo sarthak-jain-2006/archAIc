@@ -1,16 +1,19 @@
-# ── Prometheus Stack Helm Values ──────────────────────────────────────────────
-# Chart: prometheus-community/kube-prometheus-stack
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: observability
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
 
-prometheus:
-  prometheusSpec:
-    # Allow scraping from the 'archaics' namespace
-    serviceMonitorNamespaceSelector: {}
-    serviceMonitorSelector: {}
-    podMonitorNamespaceSelector: {}
-    podMonitorSelector: {}
-    
-    # Generic pod scraping via annotations (standard for simple setups)
-    additionalScrapeConfigs:
+    scrape_configs:
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+
       - job_name: 'kubernetes-pods'
         kubernetes_sd_configs:
           - role: pod
@@ -35,16 +38,3 @@ prometheus:
           - source_labels: [__meta_kubernetes_pod_name]
             action: replace
             target_label: kubernetes_pod_name
-
-grafana:
-  enabled: true
-  adminPassword: "admin"
-  additionalsDataSources:
-    - name: Jaeger
-      type: jaeger
-      url: http://jaeger-all-in-one-query.observability.svc.cluster.local:16686
-      access: proxy
-    - name: Loki
-      type: loki
-      url: http://loki-stack.observability.svc.cluster.local:3100
-      access: proxy
