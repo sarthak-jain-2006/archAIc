@@ -124,7 +124,7 @@ Health and current failure mode.
 }
 ```
 
-### 5) POST `/inject-failure?type=<timeout|error|cpu|crash>`
+### 5) POST `/inject-failure?type=<timeout|error|cpu|crash>&intensity=1&probability=1.0&duration=<seconds>`
 
 Enable failure injection mode.
 
@@ -132,19 +132,36 @@ Enable failure injection mode.
   - `X-Trace-ID` (optional)
 - Query params:
   - `type` (required): `timeout`, `error`, `cpu`, `crash`
+  - `intensity` (optional, default `1`): positive integer multiplier
+  - `probability` (optional, default `1.0`): trigger chance per request in range `0.0` to `1.0`
+  - `duration` (optional): seconds before failure auto-disables
 - Request body: none
 
 - Success response (`200`):
 
 ```json
 {
-  "injected": "timeout",
-  "service": "auth-service"
+  "service": "auth-service",
+  "failure_config": {
+    "enabled": true,
+    "type": "timeout",
+    "intensity": 1,
+    "probability": 1.0,
+    "duration": null
+  }
 }
 ```
 
 - Common error responses:
   - `400` invalid failure type
+  - `400` invalid `intensity`, `probability`, or `duration`
+
+Failure behavior notes:
+
+- `timeout`: delays request by `2 * intensity` seconds
+- `error`: returns HTTP `500` with `Simulated failure`
+- `cpu`: starts background CPU pressure
+- `crash`: terminates process
 
 ### 6) POST `/reset`
 

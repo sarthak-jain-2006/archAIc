@@ -2,6 +2,8 @@
 
 > **Layer 1: Microservices Foundation**
 > The distributed system that generates real logs, traces, and metrics for the AI intelligence layer.
+> It now includes chaos engineering controls to simulate realistic, unpredictable failure patterns seen in production systems.
+> You can run controlled experiments with probabilistic, time-bound, and intensity-based failures across dependent services.
 
 ---
 
@@ -22,6 +24,17 @@ DB Service        :8002   ← In-memory store, primary failure generator
 
 **Dependency graph:** `product → auth`, `product → db`
 This chain is what enables Root Cause Analysis in Layer 2.
+
+---
+
+## Features
+
+- **Probabilistic failure simulation**: Trigger failures randomly using per-request probability controls.
+- **Time-bound failures**: Configure automatic failure deactivation after a specified duration.
+- **Intensity-based chaos controls**: Scale timeout length and CPU-pressure impact safely during experiments.
+- **Cascading failure testing**: Observe upstream/downstream impact when auth or DB degrades.
+- **Distributed trace tracking**: Follow request flow across services using shared `trace_id` / `X-Trace-ID`.
+- **Structured observability output**: JSON logs and metrics-ready behavior for analysis and RCA.
 
 ---
 
@@ -101,19 +114,42 @@ uvicorn main:app --port 8003 --reload
 
 ---
 
-## Failure Injection
+## Failure Injection System
 
-Each service supports the `POST /inject-failure?type=<TYPE>` endpoint.
+Each service supports `POST /inject-failure` with query params:
 
-| Type       | Effect                             |
-| ---------- | ---------------------------------- |
-| `timeout`  | Sleeps 10-15s (simulates hang)     |
-| `error`    | Returns HTTP 500/503               |
-| `cpu`      | Busy loop for 2-3s (CPU spike)     |
-| `crash`    | Process exits (`os._exit(1)`)      |
-| `bad_data` | Returns corrupted data _(DB only)_ |
+- `type`: failure mode (`timeout`, `error`, `cpu`, `crash`, plus `bad_data` on DB)
+- `intensity`: positive integer multiplier (default: `1`)
+- `probability`: trigger chance per request from `0.0` to `1.0` (default: `1.0`)
+- `duration`: optional active window in seconds; failure auto-disables when elapsed
 
-Reset with `POST /reset`.
+Reset any service with `POST /reset`.
+
+| Type       | Effect                                                                     |
+| ---------- | -------------------------------------------------------------------------- |
+| `timeout`  | Adds async delay (`2 * intensity` seconds) to simulate latency/hangs       |
+| `error`    | Returns simulated HTTP 500 failure response                                |
+| `cpu`      | Starts CPU pressure workload in background to simulate resource exhaustion |
+| `crash`    | Terminates service process (`os._exit(1)`)                                 |
+| `bad_data` | Returns intentionally corrupted payloads _(DB service only)_               |
+
+### Failure Injection Examples
+
+```bash
+# Probabilistic failure on Product service (30% of requests fail with error)
+curl -X POST "http://localhost:8003/inject-failure?type=error&probability=0.3"
+
+# Duration-based timeout on Auth service (active for 45 seconds)
+curl -X POST "http://localhost:8001/inject-failure?type=timeout&intensity=2&duration=45"
+
+# DB bad_data for 20 seconds at full probability
+curl -X POST "http://localhost:8002/inject-failure?type=bad_data&probability=1.0&duration=20"
+
+# Reset after experiment
+curl -X POST http://localhost:8001/reset
+curl -X POST http://localhost:8002/reset
+curl -X POST http://localhost:8003/reset
+```
 
 ---
 
@@ -166,6 +202,48 @@ curl -X POST http://localhost:8002/reset
 
 ---
 
+## Demo Scenarios
+
+### 1. Auth failure -> Product fails
+
+```bash
+# Force Auth errors
+curl -X POST "http://localhost:8001/inject-failure?type=error&probability=1.0"
+
+# Product depends on Auth token validation, so protected calls fail upstream
+curl http://localhost:8003/products -H "Authorization: Bearer $TOKEN"
+```
+
+Expected behavior: product-service returns auth-related failure path (`401`/upstream unavailability behavior), and logs show dependency impact.
+
+### 2. DB bad_data -> Corrupted response
+
+```bash
+# Inject corrupted data responses in DB
+curl -X POST "http://localhost:8002/inject-failure?type=bad_data&duration=30"
+
+# Product fetch now receives malformed DB payload content
+curl http://localhost:8003/products -H "Authorization: Bearer $TOKEN"
+```
+
+Expected behavior: DB returns intentionally degraded fields (for example `name: null`, invalid prices), enabling downstream resilience testing.
+
+### 3. Random failures -> Partial system instability
+
+```bash
+# Random timeout spikes on DB at 40% probability
+curl -X POST "http://localhost:8002/inject-failure?type=timeout&intensity=2&probability=0.4&duration=60"
+
+# Repeated calls show intermittent success/failure patterns
+for i in {1..10}; do
+  curl -s -o /dev/null -w "request $i -> %{http_code}\n" http://localhost:8003/products -H "Authorization: Bearer $TOKEN"
+done
+```
+
+Expected behavior: mixed response outcomes that emulate real distributed instability and intermittent degradation.
+
+---
+
 ## Log Format
 
 Every log line is valid JSON:
@@ -181,6 +259,13 @@ Every log line is valid JSON:
 ```
 
 The same `trace_id` appears across **all** services for a single request chain — enabling distributed tracing in Layer 2.
+
+---
+
+## Why This Matters
+
+Real distributed systems fail in unpredictable ways: partial outages, latency spikes, and bad downstream data are common in production.
+This project lets you simulate those conditions safely, observe the resulting behavior via trace-linked logs, and validate resilience strategies before real incidents occur.
 
 ---
 
