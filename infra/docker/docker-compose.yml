@@ -140,6 +140,17 @@ services:
     networks:
       - archaIc-net
 
+  # ── AI Operator Service ─────────────────────────────────────────────────────
+  ai-operator:
+    build: ../../services/ai-operator
+    container_name: ai-operator
+    ports:
+      - "8005:8005"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    networks:
+      - archaIc-net
+
 networks:
   archaIc-net:
     driver: bridge

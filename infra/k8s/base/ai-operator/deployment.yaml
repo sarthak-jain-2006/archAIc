@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-operator
+  labels:
+    app: ai-operator
+    app.kubernetes.io/part-of: archaics
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-operator
+  template:
+    metadata:
+      labels:
+        app: ai-operator
+    spec:
+      containers:
+        - name: ai-operator
+          image: ai-operator:latest
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8005
+          env:
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: archaics-secrets
+                  key: gemini-api-key
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8005
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8005
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
