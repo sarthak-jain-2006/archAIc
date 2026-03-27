@@ -20,9 +20,14 @@ Product Service   :8003   ← Business logic, calls auth + db
   │
   ▼
 DB Service        :8002   ← In-memory store, primary failure generator
+
+Client
+  │
+  ▼
+Payment Service   :8004   ← Checkout flow, calls auth + db (+ Stripe)
 ```
 
-**Dependency graph:** `product → auth`, `product → db`
+**Dependency graph:** `product → auth`, `product → db`, `payment → auth`, `payment → db`, `payment → stripe`
 This chain is what enables Root Cause Analysis in Layer 2.
 
 ---
@@ -52,16 +57,17 @@ minikube start
 # PowerShell:
 minikube docker-env | Invoke-Expression
 # Bash/Zsh:
-# eval $(minikube docker-env)
+eval $(minikube docker-env)
 
 # 3. Build application images directly into the Minikube registry
-docker build -t auth-service:latest ./auth
-docker build -t db-service:latest ./db
-docker build -t product-service:latest ./product
+docker build -t auth-service:latest ./services/auth
+docker build -t db-service:latest ./services/db
+docker build -t product-service:latest ./services/product
+docker build -t payment-service:latest ./services/payment
 
 # 4. Deploy Base Services and Observability Stack
-kubectl apply -k k8s/base
-kubectl apply -k k8s/observability
+kubectl apply -k infra/k8s/base
+kubectl apply -k infra/k8s/observability
 
 # 5. Wait for pods to initialize
 kubectl get pods -A -w
@@ -71,6 +77,9 @@ kubectl get pods -A -w
 kubectl port-forward svc/grafana 3000:3000 -n observability
 kubectl port-forward svc/jaeger-all-in-one-query 16686:16686 -n observability
 kubectl port-forward svc/product-service 8003:8003 -n archaics
+
+# Optional: payment service (if/when deployed in k8s base)
+# kubectl port-forward svc/payment-service 8004:8004 -n archaics
 ```
 
 ### 2. With Docker Compose (Local Dev)
@@ -79,7 +88,7 @@ kubectl port-forward svc/product-service 8003:8003 -n archaics
 docker compose -f infra/docker/docker-compose.yml up --build
 ```
 
-All three services start with health checks. `product-service` waits for the other two before starting.
+All four services start with health checks. `product-service` and `payment-service` wait for auth/db before starting.
 
 ### 3. Without Docker (Bare Metal)
 
@@ -99,6 +108,12 @@ cd services/product
 pip install -r requirements.txt
 AUTH_SERVICE_URL=http://localhost:8001 DB_SERVICE_URL=http://localhost:8002 \
 uvicorn main:app --port 8003 --reload
+
+# Terminal 4 — Payment Service
+cd services/payment
+pip install -r requirements.txt
+AUTH_SERVICE_URL=http://localhost:8001 DB_SERVICE_URL=http://localhost:8002 STRIPE_API_KEY=sk_test_dummy \
+uvicorn main:app --port 8004 --reload
 ```
 
 ### Dashboard
