@@ -16,6 +16,8 @@ import json
 import logging
 import asyncio
 import uuid
+import random
+import threading
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, HTTPException, Header, Query, Request
@@ -85,9 +87,14 @@ _products: List[dict] = [
 # { user_id: [ {product_id, name, price, qty} ] }
 _carts: dict[str, List[dict]] = {}
 
-_failure_state: dict = {
-    "type": None,  # "timeout" | "error" | "cpu" | "crash" | "bad_data"
+failure_config: dict = {
+    "enabled": False,
+    "type": None,
+    "intensity": 1,
+    "probability": 1.0,
+    "duration": None,
 }
+failure_start_time = None
 
 
 def _log(level: str, message: str, trace_id: str = "N/A"):
@@ -95,22 +102,47 @@ def _log(level: str, message: str, trace_id: str = "N/A"):
     getattr(logger, level.lower())(message, extra=extra)
 
 
-async def _apply_failure(trace_id: str):
-    ftype = _failure_state.get("type")
+async def _apply_failure(trace_id: str) -> bool:
+    global failure_start_time
+
+    if not failure_config.get("enabled", False):
+        return False
+
+    duration = failure_config.get("duration")
+    if duration is not None:
+        if failure_start_time is None:
+            failure_start_time = time.time()
+        elif (time.time() - failure_start_time) > duration:
+            failure_config.update({"enabled": False, "type": None})
+            failure_start_time = None
+            return False
+
+    probability = failure_config.get("probability", 1.0)
+    if random.random() > probability:
+        return False
+
+    ftype = failure_config.get("type")
+    intensity = max(1, int(failure_config.get("intensity", 1)))
+    _log("ERROR", f"Failure triggered: {ftype}", trace_id)
+
     if ftype == "timeout":
-        _log("warning", "Injected DB timeout — sleeping 15s", trace_id)
-        await asyncio.sleep(15)
+        await asyncio.sleep(2 * intensity)
+        return True
     elif ftype == "error":
-        _log("error", "Injected DB error — raising 503", trace_id)
-        raise HTTPException(status_code=503, detail="DB service failure: injected error")
+        raise HTTPException(status_code=500, detail="Simulated failure")
     elif ftype == "cpu":
-        _log("warning", "Injected CPU spike on DB", trace_id)
-        end = time.time() + 3
-        while time.time() < end:
-            _ = sum(range(10_000))
+        def _cpu_burn_forever():
+            while True:
+                _ = sum(range(100_000))
+
+        threading.Thread(target=_cpu_burn_forever, daemon=True).start()
+        return True
     elif ftype == "crash":
-        _log("critical", "Injected DB crash — terminating process", trace_id)
         os._exit(1)
+    elif ftype == "bad_data":
+        return True
+
+    return False
 
 
 # ─── Middleware ────────────────────────────────────────────────────────────────
@@ -140,13 +172,13 @@ class CartItem(BaseModel):
 @app.get("/products")
 async def get_products(request: Request):
     trace_id = request.state.trace_id
+    failure_triggered = await _apply_failure(trace_id)
     _log("info", "DB read: fetching all products", trace_id)
-    await _apply_failure(trace_id)
 
     t0 = time.time()
 
     # "bad_data" failure mode: return corrupted/partial data
-    if _failure_state.get("type") == "bad_data":
+    if failure_config.get("type") == "bad_data" and failure_triggered:
         _log("warning", "Returning bad/corrupted product data", trace_id)
         corrupted = [{"id": p["id"], "name": None, "price": -1} for p in _products]
         return corrupted
@@ -161,8 +193,8 @@ async def get_products(request: Request):
 @app.post("/cart/add")
 async def add_to_cart(item: CartItem, request: Request):
     trace_id = request.state.trace_id
-    _log("info", f"DB write: cart add — user={item.user_id} product={item.product_id} qty={item.quantity}", trace_id)
     await _apply_failure(trace_id)
+    _log("info", f"DB write: cart add — user={item.user_id} product={item.product_id} qty={item.quantity}", trace_id)
 
     t0 = time.time()
     product = next((p for p in _products if p["id"] == item.product_id), None)
@@ -195,8 +227,8 @@ async def add_to_cart(item: CartItem, request: Request):
 @app.get("/cart/{user_id}")
 async def get_cart(user_id: str, request: Request):
     trace_id = request.state.trace_id
-    _log("info", f"DB read: cart fetch for user={user_id}", trace_id)
     await _apply_failure(trace_id)
+    _log("info", f"DB read: cart fetch for user={user_id}", trace_id)
 
     t0 = time.time()
     cart = _carts.get(user_id, [])
@@ -210,23 +242,53 @@ async def get_cart(user_id: str, request: Request):
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy", "service": "db-service", "failure": _failure_state["type"]}
+    return {"status": "healthy", "service": "db-service", "failure": failure_config["type"]}
 
 
 # ─── Failure Injection ────────────────────────────────────────────────────────
 
 @app.post("/inject-failure")
-async def inject_failure(type: str = Query(..., description="timeout | error | cpu | crash | bad_data")):
+async def inject_failure(
+    type: str = Query(..., description="timeout | error | cpu | crash | bad_data"),
+    intensity: int = Query(1),
+    probability: float = Query(1.0),
+    duration: Optional[int] = Query(None),
+):
+    global failure_start_time
+
     valid = ("timeout", "error", "cpu", "crash", "bad_data")
     if type not in valid:
         raise HTTPException(status_code=400, detail=f"Invalid type. Use one of: {valid}")
-    _failure_state["type"] = type
+    if intensity < 1:
+        raise HTTPException(status_code=400, detail="intensity must be >= 1")
+    if probability < 0 or probability > 1:
+        raise HTTPException(status_code=400, detail="probability must be between 0 and 1")
+    if duration is not None and duration < 1:
+        raise HTTPException(status_code=400, detail="duration must be >= 1 when provided")
+
+    failure_config.update({
+        "enabled": True,
+        "type": type,
+        "intensity": intensity,
+        "probability": probability,
+        "duration": duration,
+    })
+    failure_start_time = None
     _log("warning", f"Failure injected on DB service: {type}", "SYSTEM")
-    return {"injected": type, "service": "db-service"}
+    return {"service": "db-service", "failure_config": failure_config}
 
 
 @app.post("/reset")
 async def reset():
-    _failure_state["type"] = None
+    global failure_start_time
+
+    failure_config.update({
+        "enabled": False,
+        "type": None,
+        "intensity": 1,
+        "probability": 1.0,
+        "duration": None,
+    })
+    failure_start_time = None
     _log("info", "DB failure state reset to normal", "SYSTEM")
     return {"status": "reset", "service": "db-service"}
