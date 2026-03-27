@@ -1,0 +1,59 @@
+# ── Product Service Deployment ────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: product-service
+  labels:
+    app: product-service
+    app.kubernetes.io/part-of: archaics
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: product-service
+  template:
+    metadata:
+      labels:
+        app: product-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8003"
+    spec:
+      containers:
+        - name: product-service
+          image: product-service:latest
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8003
+          env:
+            - name: AUTH_SERVICE_URL
+              value: "http://auth-service.archaics.svc.cluster.local:8001"
+            - name: DB_SERVICE_URL
+              value: "http://db-service.archaics.svc.cluster.local:8002"
+            - name: REQUEST_TIMEOUT
+              value: "8"
+            - name: OTEL_SERVICE_NAME
+              value: "product-service"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://jaeger-all-in-one.observability.svc.cluster.local:4318"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8003
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8003
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "200m"
+            limits:
+              memory: "512Mi"
+              cpu: "1000m"

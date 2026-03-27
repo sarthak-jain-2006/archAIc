@@ -24,6 +24,16 @@ import httpx
 from fastapi import FastAPI, HTTPException, Header, Query, Request
 from pydantic import BaseModel
 
+# ─── Observability Imports ────────────────────────────────────────────────────
+from prometheus_fastapi_instrumentator import Instrumentator
+from opentelemetry import trace
+from opentelemetry.sdk.resources import RESOURCE_ATTRIBUTES, Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+
 
 # ─── Structured JSON Logger ───────────────────────────────────────────────────
 
@@ -52,6 +62,24 @@ logger.propagate = False
 # ─── App & Config ─────────────────────────────────────────────────────────────
 
 app = FastAPI(title="Product/Cart Service", version="1.0.0")
+
+# ─── OpenTelemetry Setup ──────────────────────────────────────────────────────
+OTEL_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://jaeger-all-in-one:4318")
+resource = Resource(attributes={
+    RESOURCE_ATTRIBUTES.SERVICE_NAME: "product-service"
+})
+provider = TracerProvider(resource=resource)
+processor = BatchSpanProcessor(OTLPSpanExporter(endpoint=f"{OTEL_ENDPOINT}/v1/traces"))
+provider.add_span_processor(processor)
+trace.set_tracer_provider(provider)
+
+FastAPIInstrumentor.instrument_app(app)
+HTTPXClientInstrumentor().instrument()
+
+# ─── Prometheus Setup ─────────────────────────────────────────────────────────
+@app.on_event("startup")
+async def startup_event():
+    Instrumentator().instrument(app).expose(app)
 
 AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://auth-service:8001")
 DB_SERVICE_URL   = os.getenv("DB_SERVICE_URL",   "http://db-service:8002")

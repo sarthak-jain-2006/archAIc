@@ -1,0 +1,53 @@
+# ── DB Service Deployment ──────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db-service
+  labels:
+    app: db-service
+    app.kubernetes.io/part-of: archaics
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: db-service
+  template:
+    metadata:
+      labels:
+        app: db-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8002"
+    spec:
+      containers:
+        - name: db-service
+          image: db-service:latest
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8002
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: "db-service"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://jaeger-all-in-one.observability.svc.cluster.local:4318"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
