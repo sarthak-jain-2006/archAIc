@@ -53,12 +53,12 @@ uvicorn main:app --port 8004 --reload
 
 ### Payment Service — `http://localhost:8004`
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/create-checkout-session` | Create Stripe checkout (requires auth token) |
-| GET | `/health` | Health + failure state |
-| POST | `/inject-failure?type=X` | Inject failure |
-| POST | `/reset` | Clear failure |
+| Method | Endpoint                                                                | Description                                  |
+| ------ | ----------------------------------------------------------------------- | -------------------------------------------- |
+| POST   | `/create-checkout-session`                                              | Create Stripe checkout (requires auth token) |
+| GET    | `/health`                                                               | Health + failure state                       |
+| POST   | `/inject-failure?type=X&intensity=1&probability=1.0&duration=<seconds>` | Inject failure                               |
+| POST   | `/reset`                                                                | Clear failure                                |
 
 ---
 
@@ -69,12 +69,14 @@ uvicorn main:app --port 8004 --reload
 Creates a Stripe checkout session for the authenticated user's cart.
 
 **Request:**
+
 ```
 Headers:
   Authorization: Bearer <JWT_TOKEN>
 ```
 
 **Response (200):**
+
 ```json
 {
   "checkout_url": "https://mock.stripe.com/checkout/550e8400-e29b-41d4...",
@@ -86,15 +88,16 @@ Headers:
 
 **Error Responses:**
 
-| Status | Condition |
-|--------|-----------|
-| `400` | Cart is empty |
-| `401` | Token validation failed |
-| `500` | Stripe API error |
-| `503` | Auth or DB service unreachable |
-| `504` | Auth or DB service timeout |
+| Status | Condition                      |
+| ------ | ------------------------------ |
+| `400`  | Cart is empty                  |
+| `401`  | Token validation failed        |
+| `500`  | Stripe API error               |
+| `503`  | Auth or DB service unreachable |
+| `504`  | Auth or DB service timeout     |
 
 **Flow:**
+
 1. Extract `Authorization` token from headers
 2. Call `auth-service /validate` to verify token → extract email
 3. Extract `user_id` from email (split on "@")
@@ -110,6 +113,7 @@ Headers:
 Service health status + current failure injection state.
 
 **Response (200):**
+
 ```json
 {
   "status": "healthy",
@@ -119,6 +123,7 @@ Service health status + current failure injection state.
 ```
 
 When failure is injected:
+
 ```json
 {
   "status": "healthy",
@@ -133,25 +138,40 @@ When failure is injected:
 
 Each failure type tests different failure scenarios relevant to payment processing.
 
-### **POST** `/inject-failure?type=<TYPE>`
+### **POST** `/inject-failure?type=<TYPE>&intensity=1&probability=1.0&duration=<seconds>`
 
-| Type | Effect | Use Case |
-|------|--------|----------|
-| `timeout` | Sleeps 10s on checkout (simulates hang) | Test timeout handling in RCA |
-| `error` | Returns HTTP 500 (Stripe API error) | Test error recovery |
-| `cpu` | Busy loop for 2-3s (CPU spike) | Monitor CPU impact |
-| `crash` | Process exits (`os._exit(1)`) | Test service restart behavior |
+Query parameters:
+
+- `type` (required): `timeout`, `error`, `cpu`, `crash`
+- `intensity` (optional, default `1`): positive integer multiplier
+- `probability` (optional, default `1.0`): trigger chance per request (`0.0` to `1.0`)
+- `duration` (optional): failure auto-disables after given seconds
+
+| Type      | Effect                                    | Use Case                      |
+| --------- | ----------------------------------------- | ----------------------------- |
+| `timeout` | Delays request by `2 * intensity` seconds | Test timeout handling in RCA  |
+| `error`   | Returns HTTP 500 (`Simulated failure`)    | Test error recovery           |
+| `cpu`     | Starts background CPU pressure thread     | Monitor CPU impact            |
+| `crash`   | Process exits (`os._exit(1)`)             | Test service restart behavior |
 
 **Example:**
+
 ```bash
-curl -X POST "http://localhost:8004/inject-failure?type=timeout"
+curl -X POST "http://localhost:8004/inject-failure?type=timeout&intensity=2&probability=0.5&duration=30"
 ```
 
 **Response (200):**
+
 ```json
 {
-  "injected": "timeout",
-  "service": "payment-service"
+  "service": "payment-service",
+  "failure_config": {
+    "enabled": true,
+    "type": "timeout",
+    "intensity": 2,
+    "probability": 0.5,
+    "duration": 30
+  }
 }
 ```
 
@@ -160,6 +180,7 @@ curl -X POST "http://localhost:8004/inject-failure?type=timeout"
 Clear all failure injections.
 
 **Response (200):**
+
 ```json
 {
   "status": "reset",
@@ -172,6 +193,7 @@ Clear all failure injections.
 ## Example: Full Checkout Flow
 
 ### 1. Sign up
+
 ```bash
 curl -X POST http://localhost:8001/signup \
   -H "Content-Type: application/json" \
@@ -179,6 +201,7 @@ curl -X POST http://localhost:8001/signup \
 ```
 
 ### 2. Login → get token
+
 ```bash
 TOKEN=$(curl -s -X POST http://localhost:8001/login \
   -H "Content-Type: application/json" \
@@ -186,6 +209,7 @@ TOKEN=$(curl -s -X POST http://localhost:8001/login \
 ```
 
 ### 3. Add items to cart
+
 ```bash
 curl -X POST http://localhost:8003/cart/add \
   -H "Authorization: Bearer $TOKEN" \
@@ -199,12 +223,14 @@ curl -X POST http://localhost:8003/cart/add \
 ```
 
 ### 4. Create checkout session
+
 ```bash
 curl -X POST http://localhost:8004/create-checkout-session \
   -H "Authorization: Bearer $TOKEN"
 ```
 
 **Expected output:**
+
 ```json
 {
   "checkout_url": "https://mock.stripe.com/checkout/550e8400-e29b-41d4...",
@@ -219,17 +245,20 @@ curl -X POST http://localhost:8004/create-checkout-session \
 ## Example: Failure Cascade Flow
 
 ### 1. Inject DB timeout
+
 ```bash
 curl -X POST "http://localhost:8002/inject-failure?type=timeout"
 ```
 
 ### 2. Attempt checkout (will fail)
+
 ```bash
 curl -X POST http://localhost:8004/create-checkout-session \
   -H "Authorization: Bearer $TOKEN"
 ```
 
 **Expected response (504):**
+
 ```json
 {
   "detail": "DB service timeout — cart unavailable"
@@ -237,12 +266,14 @@ curl -X POST http://localhost:8004/create-checkout-session \
 ```
 
 **Log trace shows:**
+
 ```
 db-service:      "Injected DB timeout — sleeping 15s"
 payment-service: "DB-service timeout on cart fetch after 10002ms"
 ```
 
 ### 3. Reset and retry
+
 ```bash
 curl -X POST http://localhost:8002/reset
 curl -X POST http://localhost:8004/create-checkout-session \
@@ -268,6 +299,7 @@ Every log line is valid JSON with trace correlation:
 ```
 
 The same `trace_id` appears in:
+
 - `auth-service` (token validation)
 - `db-service` (cart fetch)
 - `payment-service` (checkout creation)
@@ -278,13 +310,13 @@ This enables **distributed tracing** for RCA across all service layers.
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `AUTH_SERVICE_URL` | `http://auth-service:8001` | Auth service endpoint |
-| `DB_SERVICE_URL` | `http://db-service:8002` | DB service endpoint |
-| `STRIPE_API_KEY` | `sk_test_dummy` | Stripe API key (dummy for testing) |
-| `REQUEST_TIMEOUT` | `8` | HTTP request timeout in seconds |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `` | OpenTelemetry endpoint (optional) |
+| Variable                      | Default                    | Description                        |
+| ----------------------------- | -------------------------- | ---------------------------------- |
+| `AUTH_SERVICE_URL`            | `http://auth-service:8001` | Auth service endpoint              |
+| `DB_SERVICE_URL`              | `http://db-service:8002`   | DB service endpoint                |
+| `STRIPE_API_KEY`              | `sk_test_dummy`            | Stripe API key (dummy for testing) |
+| `REQUEST_TIMEOUT`             | `8`                        | HTTP request timeout in seconds    |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | ``                         | OpenTelemetry endpoint (optional)  |
 
 ---
 
@@ -293,6 +325,7 @@ This enables **distributed tracing** for RCA across all service layers.
 ### With Dummy Key (`sk_test_dummy`)
 
 Returns mock checkout URLs:
+
 ```json
 {
   "checkout_url": "https://mock.stripe.com/checkout/{uuid}",
@@ -307,6 +340,7 @@ Useful for **testing without real Stripe account**.
 Set `STRIPE_API_KEY=sk_test_<your_real_key>` in docker-compose.yml or environment.
 
 Returns real Stripe checkout URLs:
+
 ```json
 {
   "checkout_url": "https://checkout.stripe.com/pay/...",
@@ -321,6 +355,7 @@ Returns real Stripe checkout URLs:
 ### Metrics (Prometheus)
 
 Automatic instrumentation tracks:
+
 - HTTP request latency
 - Request count per endpoint
 - Error rates
@@ -331,6 +366,7 @@ Access at: `http://localhost:8004/metrics`
 ### Traces (Jaeger)
 
 All requests propagate `trace_id` across service chain:
+
 - Payment service calls → auth-service (traced)
 - Payment service calls → db-service (traced)
 - Total latency visible across all hops
@@ -338,6 +374,7 @@ All requests propagate `trace_id` across service chain:
 ### Logs (Structured JSON)
 
 All logs include:
+
 - Service name: `payment-service`
 - Log level: `INFO`, `WARNING`, `ERROR`, `CRITICAL`
 - Trace ID for correlation
@@ -385,18 +422,22 @@ See `requirements.txt` for versions.
 ## Troubleshooting
 
 ### "Auth service unreachable"
+
 - Check auth-service is running: `docker ps | grep auth`
 - Verify `AUTH_SERVICE_URL` env var points to correct host:port
 
 ### "DB service timeout"
+
 - DB service may be slow, increase `REQUEST_TIMEOUT` env var
 - Check db-service logs: `docker logs payment-service` (via docker-compose)
 
 ### "Cart is empty"
+
 - Add items via product service `/cart/add` endpoint with valid token
 - Verify user_id matches between auth token and cart
 
 ### "Stripe API error"
+
 - If using real key, check Stripe API credentials
 - For testing, use dummy key `sk_test_dummy` (default)
 
