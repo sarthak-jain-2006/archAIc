@@ -54,6 +54,30 @@ services:
     networks:
       - archaIc-net
 
+  # ── Payment Service ─────────────────────────────────────────────────────────
+  payment-service:
+    build: ./payment
+    container_name: payment-service
+    ports:
+      - "8004:8004"
+    environment:
+      AUTH_SERVICE_URL: http://auth-service:8001
+      DB_SERVICE_URL: http://db-service:8002
+      REQUEST_TIMEOUT: "8"
+      STRIPE_API_KEY: ${STRIPE_API_KEY:-sk_test_dummy}
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      db-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8004/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - archaIc-net
+
 networks:
   archaIc-net:
     driver: bridge
