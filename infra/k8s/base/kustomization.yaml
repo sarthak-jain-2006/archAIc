@@ -17,6 +17,7 @@ secretGenerator:
     literals:
       - jwt-secret=archaIc-secret-key-2024
       - gemini-api-key=PLACEHOLDER_KEY
+      - stripe-api-key=sk_test_dummy
 
 generatorOptions:
   disableNameSuffixHash: true

@@ -238,6 +238,21 @@ async def get_cart(user_id: str, request: Request):
     return {"user_id": user_id, "items": cart, "total": round(total, 2), "trace_id": trace_id}
 
 
+@app.post("/cart/clear")
+async def clear_cart(body: dict, request: Request):
+    trace_id = request.state.trace_id
+    await _apply_failure(trace_id)
+    user_id = body.get("user_id")
+    _log("info", f"DB write: cart clear for user={user_id}", trace_id)
+
+    t0 = time.time()
+    if user_id in _carts:
+        _carts[user_id] = []
+    query_ms = round((time.time() - t0) * 1000, 2)
+    _log("info", f"DB write success: cart cleared for user={user_id} in {query_ms}ms", trace_id)
+    return {"status": "cleared", "user_id": user_id, "trace_id": trace_id}
+
+
 # ─── Health ───────────────────────────────────────────────────────────────────
 
 @app.get("/health")

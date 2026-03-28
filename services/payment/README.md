@@ -9,6 +9,10 @@ Service directory: `services/payment`
 
 ---
 
+minikube image build -t payment-service:latest ./services/payment && \
+kubectl apply -k infra/k8s/base && \
+kubectl rollout status deployment/payment-service -n archaics --timeout=180s
+
 ## Architecture
 
 ```

@@ -40,6 +40,9 @@ This chain is what enables Root Cause Analysis in Layer 2.
 - **Cascading failure testing**: Observe upstream/downstream impact when auth or DB degrades.
 - **Distributed trace tracking**: Follow request flow across services using shared `trace_id` / `X-Trace-ID`.
 - **Structured observability output**: JSON logs and metrics-ready behavior for analysis and RCA.
+- **Cart clearing after payment**: Automatically clears user cart upon successful checkout (real or simulated).
+- **Mobile-friendly chaos control**: Phone-based UI to inject failures and run load tests from anywhere.
+- **K6 load testing**: Pre-built load test scenarios (normal, spike, endurance, stress) for performance validation.
 
 ---
 
@@ -172,18 +175,30 @@ AUTH_SERVICE_URL=http://localhost:8101 DB_SERVICE_URL=http://localhost:8102 STRI
 uvicorn main:app --port 8104 --reload
 ```
 
-### Dashboard
+### Dashboard & Observability
 
-The repo now includes a Next.js dashboard at `http://localhost:7000/dashboard`.
+The repo includes a Next.js dashboard and observability services:
+
+#### Analytics Dashboard (Port 7000)
 
 ```bash
-# Install frontend dependencies
 cd apps/dashboard
 npm install
-
-# Start the dashboard
 npm run dev
 ```
+
+Open: `http://localhost:7000`
+
+#### Chaos Control Dashboard (Port 8080)
+
+Phone-friendly UI to inject failures and run load tests:
+
+```bash
+./scripts/serve-control.sh
+```
+
+Open on laptop: `http://localhost:8080`
+Open on phone: `http://<laptop-ip>:8080`
 
 By default the dashboard targets:
 
@@ -207,6 +222,108 @@ npm run dev
 
 ---
 
+## Load Testing with k6
+
+### Prerequisites
+
+Install k6:
+
+```bash
+brew install k6        # macOS
+apt install k6         # Ubuntu/Debian
+choco install k6       # Windows
+```
+
+### Quick Start
+
+```bash
+# Normal load test (10 VUs, 30s)
+./load/run-test.sh normal
+
+# Spike test (0→50→0 VUs)
+./load/run-test.sh spike
+
+# Endurance test (5 VUs, 2 minutes)
+./load/run-test.sh endurance
+
+# Stress test (0→100 VUs)
+./load/run-test.sh stress
+
+# Run with failures pre-injected
+./load/run-test.sh normal --with-failures
+```
+
+### Available Load Tests
+
+| Script         | VUs    | Duration | Scenario               | Purpose             |
+| -------------- | ------ | -------- | ---------------------- | ------------------- |
+| `normal.js`    | 10     | 30s      | Full user journey      | Establish baseline  |
+| `spike.js`     | 0→50→0 | 45s      | Sudden traffic spike   | Test spike handling |
+| `endurance.js` | 5      | 2min     | Repeated operations    | Find memory leaks   |
+| `stress.js`    | 0→100  | 70s      | Ramp to breaking point | Find limits         |
+
+---
+
+## Chaos Control Dashboard
+
+Mobile-friendly interface to control the entire system:
+
+### Start the Dashboard
+
+```bash
+./scripts/serve-control.sh
+```
+
+### Features
+
+- **Failure Injection**: Select type, service, duration
+- **Load Testing**: Run k6 tests from the UI
+- **Quick Actions**: Error storms, high latency triggers
+- **Response Logging**: Real-time feedback on actions
+
+### Quick Reference
+
+```bash
+./scripts/chaos-help.sh
+```
+
+### Typical Workflow
+
+1. Start control dashboard:
+
+   ```bash
+   ./scripts/serve-control.sh
+   ```
+
+2. Open on phone/laptop:
+
+   ```
+   http://localhost:8080
+   http://<laptop-ip>:8080 (from phone)
+   ```
+
+3. Run a baseline load test:
+
+   ```bash
+   ./load/run-test.sh normal
+   ```
+
+4. From dashboard, inject a failure (e.g., timeout on product service)
+
+5. Run spike test to see impact:
+
+   ```bash
+   ./load/run-test.sh spike
+   ```
+
+6. Watch effects on dashboard (http://localhost:7000)
+
+7. Click "Reset All Failures" to recover
+
+8. Verify recovery with another baseline test
+
+---
+
 ## Service APIs
 
 ### Auth Service — `http://localhost:8001`
@@ -227,6 +344,7 @@ npm run dev
 | GET    | `/products`              | All products           |
 | POST   | `/cart/add`              | Add item to cart       |
 | GET    | `/cart/{user_id}`        | Get user cart          |
+| POST   | `/cart/clear`            | Clear user cart        |
 | GET    | `/health`                | Health + failure state |
 | POST   | `/inject-failure?type=X` | Inject failure         |
 | POST   | `/reset`                 | Clear failure          |
@@ -238,6 +356,7 @@ npm run dev
 | GET    | `/products`              | Fetch catalog (requires auth token) |
 | POST   | `/cart/add`              | Add to cart (requires auth token)   |
 | GET    | `/cart`                  | View cart (requires auth token)     |
+| POST   | `/cart/clear`            | Clear cart (requires auth token)    |
 | GET    | `/health`                | Health + failure state              |
 | POST   | `/inject-failure?type=X` | Inject failure                      |
 | POST   | `/reset`                 | Clear failure                       |

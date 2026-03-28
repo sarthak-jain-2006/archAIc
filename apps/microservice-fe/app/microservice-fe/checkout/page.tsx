@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { ExternalLink, ShieldCheck } from "lucide-react";
 
@@ -10,6 +10,7 @@ import { CartSkeleton } from "@/app/microservice-fe/components/LoadingSkeleton";
 import { Navbar } from "@/app/microservice-fe/components/Navbar";
 import {
   clearStoredToken,
+  clearCart,
   createCheckout,
   getCart,
   StorefrontError,
@@ -18,6 +19,7 @@ import { CartResponse } from "@/app/microservice-fe/lib/types";
 
 export default function CheckoutPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [cart, setCart] = useState<CartResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
@@ -34,7 +36,8 @@ export default function CheckoutPage() {
           setCart(response);
         }
       } catch (caughtError) {
-        const status = caughtError instanceof StorefrontError ? caughtError.status : 500;
+        const status =
+          caughtError instanceof StorefrontError ? caughtError.status : 500;
         if (status === 401) {
           clearStoredToken();
           router.push("/microservice-fe/login");
@@ -43,7 +46,11 @@ export default function CheckoutPage() {
 
         if (active) {
           setHardFailure(status === 503);
-          setError(caughtError instanceof Error ? caughtError.message : "Unable to load checkout.");
+          setError(
+            caughtError instanceof Error
+              ? caughtError.message
+              : "Unable to load checkout.",
+          );
         }
       } finally {
         if (active) {
@@ -59,6 +66,14 @@ export default function CheckoutPage() {
     };
   }, [router]);
 
+  useEffect(() => {
+    if (searchParams.get("simulated") === "1") {
+      void clearCart().catch(() => {
+        // Silently handle cart clearing failure
+      });
+    }
+  }, [searchParams]);
+
   const cartCount = useMemo(
     () => cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0,
     [cart],
@@ -72,14 +87,19 @@ export default function CheckoutPage() {
       const response = await createCheckout();
       window.location.href = response.checkout_url;
     } catch (caughtError) {
-      const status = caughtError instanceof StorefrontError ? caughtError.status : 500;
+      const status =
+        caughtError instanceof StorefrontError ? caughtError.status : 500;
       if (status === 401) {
         clearStoredToken();
         router.push("/microservice-fe/login");
         return;
       }
       setHardFailure(status === 503);
-      setError(caughtError instanceof Error ? caughtError.message : "Checkout could not start.");
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Checkout could not start.",
+      );
     } finally {
       setCheckoutLoading(false);
     }
@@ -101,15 +121,30 @@ export default function CheckoutPage() {
               <ShieldCheck className="h-4 w-4" />
               payment-service handoff
             </div>
-            <h1 className="mt-6 text-5xl font-semibold tracking-tight text-[#1e1e1e]">Ready for checkout.</h1>
+            <h1 className="mt-6 text-5xl font-semibold tracking-tight text-[#1e1e1e]">
+              Ready for checkout.
+            </h1>
             <p className="mt-5 max-w-xl text-base leading-7 text-[#6b6b6b]">
-              This final step calls the payment-service, which validates identity, reads the cart from DB, and
-              creates a checkout session.
+              This final step calls the payment-service, which validates
+              identity, reads the cart from DB, and creates a checkout session.
             </p>
+
+            {searchParams.get("simulated") === "1" ? (
+              <motion.div
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.3 }}
+                className="mt-6 rounded-2xl border border-[#c7dfbd] bg-[rgba(237,250,232,0.95)] px-4 py-3 text-sm text-[#2f6f2a]"
+              >
+                Simulated payment completed successfully. No real Stripe charge
+                was created.
+              </motion.div>
+            ) : null}
 
             {error ? (
               <motion.div
-                animate={hardFailure ? { x: [0, -8, 8, -4, 4, 0] } : { opacity: 1 }}
+                animate={
+                  hardFailure ? { x: [0, -8, 8, -4, 4, 0] } : { opacity: 1 }
+                }
                 transition={{ duration: 0.4 }}
                 className="mt-6 rounded-2xl border border-[#e6bbb1] bg-[rgba(255,239,235,0.9)] px-4 py-3 text-sm text-[#8b4335]"
               >
@@ -125,8 +160,15 @@ export default function CheckoutPage() {
               <>
                 <div className="space-y-4">
                   <SummaryRow label="Items in cart" value={String(cartCount)} />
-                  <SummaryRow label="Checkout total" value={`$${(cart?.total ?? 0).toFixed(2)}`} emphasized />
-                  <SummaryRow label="Payment route" value="/create-checkout-session" />
+                  <SummaryRow
+                    label="Checkout total"
+                    value={`$${(cart?.total ?? 0).toFixed(2)}`}
+                    emphasized
+                  />
+                  <SummaryRow
+                    label="Payment route"
+                    value="/create-checkout-session"
+                  />
                 </div>
 
                 <AnimatedButton
@@ -159,7 +201,13 @@ function SummaryRow({
   return (
     <div className="flex items-center justify-between rounded-2xl border border-white/65 bg-white/55 px-4 py-3">
       <span className="text-sm text-[#6b6b6b]">{label}</span>
-      <span className={emphasized ? "text-lg font-semibold text-[#1e1e1e]" : "text-sm font-medium text-[#1e1e1e]"}>
+      <span
+        className={
+          emphasized
+            ? "text-lg font-semibold text-[#1e1e1e]"
+            : "text-sm font-medium text-[#1e1e1e]"
+        }
+      >
         {value}
       </span>
     </div>

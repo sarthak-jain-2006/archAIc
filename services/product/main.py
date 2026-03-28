@@ -256,6 +256,33 @@ async def _db_get_cart(user_id: str, trace_id: str) -> dict:
         raise HTTPException(status_code=503, detail="DB service unreachable")
 
 
+async def _db_clear_cart(user_id: str, trace_id: str) -> dict:
+    """Clear cart on db-service."""
+    t0 = time.time()
+    _log("info", f"Calling db-service: POST /cart/clear for user={user_id}", trace_id)
+    try:
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+            res = await client.post(
+                f"{DB_SERVICE_URL}/cart/clear",
+                json={"user_id": user_id},
+                headers={"X-Trace-ID": trace_id},
+            )
+        latency_ms = round((time.time() - t0) * 1000, 2)
+        if res.status_code != 200:
+            _log("error", f"DB cart clear failed [{res.status_code}] in {latency_ms}ms", trace_id)
+            raise HTTPException(status_code=502, detail="DB service error clearing cart")
+        result = res.json()
+        _log("info", f"DB cart clear success for user={user_id} in {latency_ms}ms", trace_id)
+        return result
+    except httpx.TimeoutException:
+        latency_ms = round((time.time() - t0) * 1000, 2)
+        _log("error", f"DB-service timeout on cart clear after {latency_ms}ms", trace_id)
+        raise HTTPException(status_code=504, detail="DB service timeout — cart clear unavailable")
+    except httpx.RequestError as e:
+        _log("error", f"DB-service unreachable on cart clear: {e}", trace_id)
+        raise HTTPException(status_code=503, detail="DB service unreachable")
+
+
 # ─── Models ───────────────────────────────────────────────────────────────────
 
 class CartAddRequest(BaseModel):
@@ -310,6 +337,21 @@ async def get_cart(request: Request, authorization: str = Header(...)):
     cart = await _db_get_cart(user_id, trace_id)
     cart["trace_id"] = trace_id
     return cart
+
+
+@app.post("/cart/clear")
+async def clear_cart(request: Request, authorization: str = Header(...)):
+    trace_id = request.state.trace_id
+    await _apply_failure(trace_id)
+    _log("info", "Handling POST /cart/clear", trace_id)
+
+    email = await _validate_token(authorization, trace_id)
+    user_id = email.split("@")[0]
+
+    result = await _db_clear_cart(user_id, trace_id)
+    _log("info", f"Cart cleared successfully for user={user_id}", trace_id)
+    result["trace_id"] = trace_id
+    return result
 
 
 @app.get("/health")

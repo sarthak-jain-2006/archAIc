@@ -33,7 +33,18 @@ spec:
             - name: DB_SERVICE_URL
               value: "http://db-service.archaics.svc.cluster.local:8002"
             - name: STRIPE_API_KEY
-              value: "sk_test_dummy"
+              valueFrom:
+                secretKeyRef:
+                  name: archaics-secrets
+                  key: stripe-api-key
+            - name: ALLOW_MOCK_STRIPE
+              value: "true"
+            - name: FRONTEND_BASE_URL
+              value: "http://localhost:7001"
+            - name: STRIPE_SUCCESS_URL
+              value: "http://localhost:7001/microservice-fe/checkout/success?session_id={CHECKOUT_SESSION_ID}"
+            - name: STRIPE_CANCEL_URL
+              value: "http://localhost:7001/microservice-fe/checkout?canceled=true"
             - name: REQUEST_TIMEOUT
               value: "8"
             - name: OTEL_SERVICE_NAME

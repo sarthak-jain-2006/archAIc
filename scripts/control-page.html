@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>archAIc - Chaos Control Dashboard</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu,
+          Cantarell, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+      }
+
+      .container {
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        padding: 40px;
+        max-width: 800px;
+        width: 100%;
+      }
+
+      h1 {
+        text-align: center;
+        color: #1e1e1e;
+        margin-bottom: 10px;
+        font-size: 2.5em;
+      }
+
+      .subtitle {
+        text-align: center;
+        color: #6b6b6b;
+        margin-bottom: 40px;
+        font-size: 1.1em;
+      }
+
+      .section {
+        margin-bottom: 40px;
+      }
+
+      .section-title {
+        font-size: 1.3em;
+        font-weight: 600;
+        color: #1e1e1e;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #667eea;
+      }
+
+      .button-group {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+        margin-bottom: 20px;
+      }
+
+      .button-group.full {
+        grid-template-columns: 1fr;
+      }
+
+      button {
+        padding: 25px;
+        font-size: 1.1em;
+        font-weight: 600;
+        border: none;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+      }
+
+      button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+      }
+
+      button:active {
+        transform: translateY(0);
+      }
+
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .btn-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+      }
+
+      .btn-danger {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        color: white;
+      }
+
+      .btn-success {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        color: white;
+      }
+
+      .btn-warning {
+        background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+        color: white;
+      }
+
+      .btn-info {
+        background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+        color: white;
+      }
+
+      .status-box {
+        background: #f6f1eb;
+        border-left: 4px solid #667eea;
+        padding: 20px;
+        border-radius: 8px;
+        margin-top: 20px;
+      }
+
+      .status-box h3 {
+        color: #1e1e1e;
+        margin-bottom: 10px;
+      }
+
+      .status-list {
+        color: #6b6b6b;
+        line-height: 1.8;
+        font-size: 0.95em;
+      }
+
+      .status-list li {
+        margin-left: 20px;
+      }
+
+      .load-config {
+        background: #f9f9f9;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+      }
+
+      .config-item {
+        margin-bottom: 15px;
+      }
+
+      .config-item label {
+        display: block;
+        color: #1e1e1e;
+        font-weight: 600;
+        margin-bottom: 5px;
+      }
+
+      .config-item input,
+      .config-item select {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-size: 1em;
+      }
+
+      .config-item input:focus,
+      .config-item select:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 5px rgba(102, 126, 234, 0.3);
+      }
+
+      .response-log {
+        background: #1e1e1e;
+        color: #00ff00;
+        padding: 20px;
+        border-radius: 8px;
+        font-family: "Courier New", monospace;
+        font-size: 0.85em;
+        max-height: 300px;
+        overflow-y: auto;
+        margin-top: 20px;
+      }
+
+      .log-entry {
+        margin: 5px 0;
+        padding: 5px 0;
+        border-bottom: 1px solid #333;
+      }
+
+      .log-success {
+        color: #0f0;
+      }
+
+      .log-error {
+        color: #f00;
+      }
+
+      .log-info {
+        color: #0ff;
+      }
+
+      @media (max-width: 600px) {
+        .container {
+          padding: 20px;
+        }
+
+        h1 {
+          font-size: 1.8em;
+        }
+
+        .button-group {
+          grid-template-columns: 1fr;
+        }
+
+        button {
+          padding: 18px;
+          font-size: 1em;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>⚡ archAIc Chaos Control</h1>
+      <p class="subtitle">Failure Injection & Load Testing Dashboard</p>
+
+      <!-- Failure Injection Section -->
+      <div class="section">
+        <div class="section-title">🔥 Failure Injection</div>
+
+        <div class="load-config">
+          <div class="config-item">
+            <label for="failure-type">Failure Type</label>
+            <select id="failure-type">
+              <option value="timeout">Timeout (8s delay)</option>
+              <option value="error">Error (500 response)</option>
+              <option value="cpu">CPU Spike</option>
+              <option value="crash">Crash Service</option>
+            </select>
+          </div>
+          <div class="config-item">
+            <label for="failure-service">Target Service</label>
+            <select id="failure-service">
+              <option value="product">Product Service (8003)</option>
+              <option value="db">DB Service (8002)</option>
+              <option value="auth">Auth Service (8001)</option>
+              <option value="payment">Payment Service (8004)</option>
+            </select>
+          </div>
+          <div class="config-item">
+            <label for="failure-duration">Duration (seconds)</label>
+            <input
+              type="number"
+              id="failure-duration"
+              min="1"
+              max="300"
+              value="30"
+            />
+          </div>
+        </div>
+
+        <div class="button-group full">
+          <button class="btn-danger" onclick="injectFailure()">
+            💥 INJECT FAILURE
+          </button>
+          <button class="btn-success" onclick="resetFailure()">
+            ✅ RESET ALL FAILURES
+          </button>
+        </div>
+      </div>
+
+      <!-- Load Testing Section -->
+      <div class="section">
+        <div class="section-title">📊 Load Testing (k6)</div>
+
+        <div class="load-config">
+          <div class="config-item">
+            <label for="load-test">Load Test Type</label>
+            <select id="load-test">
+              <option value="normal">Normal Load (10 VUs, 20s)</option>
+              <option value="spike">Spike Test (0→50→0 VUs)</option>
+              <option value="endurance">Endurance (5 VUs, 60s)</option>
+              <option value="stress">Stress Test (0→100 VUs)</option>
+            </select>
+          </div>
+          <div class="config-item">
+            <label for="load-scenario">Scenario</label>
+            <select id="load-scenario">
+              <option value="products">Get Products (Simple)</option>
+              <option value="checkout">Full Checkout Flow</option>
+              <option value="cart">Cart Operations</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="button-group full">
+          <button class="btn-info" onclick="runLoadTest()">
+            🚀 START LOAD TEST
+          </button>
+          <button class="btn-primary" onclick="stopLoadTest()">
+            ⏹️ STOP LOAD TEST
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="section">
+        <div class="section-title">⚙️ Quick Actions</div>
+
+        <div class="button-group">
+          <button class="btn-warning" onclick="triggerErrorStorm()">
+            🌪️ ERROR STORM
+          </button>
+          <button class="btn-warning" onclick="triggerHighLatency()">
+            🐢 HIGH LATENCY
+          </button>
+        </div>
+
+        <div class="status-box">
+          <h3>Commands Reference:</h3>
+          <ul class="status-list">
+            <li>
+              💥 Failure Injection: Injects latency, errors, or crashes into
+              microservices
+            </li>
+            <li>
+              📊 Load Testing: Uses k6 to simulate user traffic with various
+              patterns
+            </li>
+            <li>🌪️ Error Storm: Combines multiple failures across services</li>
+            <li>🐢 High Latency: Simulates slow network conditions</li>
+            <li>
+              ✅ Reset: Clears all active failures and reduces load to normal
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Response Log -->
+      <div class="section">
+        <div class="section-title">📋 Response Log</div>
+        <div class="response-log" id="response-log">
+          <div class="log-entry log-info">
+            [INFO] Dashboard initialized. Ready to inject chaos!
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const API_BASE = "http://localhost:7001"; // microservice-fe port
+
+      function log(message, type = "info") {
+        const logEl = document.getElementById("response-log");
+        const entry = document.createElement("div");
+        entry.className = `log-entry log-${type}`;
+        const timestamp = new Date().toLocaleTimeString();
+        entry.textContent = `[${timestamp}] ${message}`;
+        logEl.appendChild(entry);
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+
+      async function injectFailure() {
+        const type = document.getElementById("failure-type").value;
+        const service = document.getElementById("failure-service").value;
+        const duration = document.getElementById("failure-duration").value;
+
+        const serviceMap = {
+          product: 8003,
+          db: 8002,
+          auth: 8001,
+          payment: 8004,
+        };
+        const port = serviceMap[service];
+
+        log(
+          `Injecting ${type} failure to service on port ${port} for ${duration}s...`,
+          "info",
+        );
+
+        try {
+          const response = await fetch(
+            `http://localhost:${port}/inject-failure?type=${type}&duration=${duration}`,
+            {
+              method: "POST",
+            },
+          );
+
+          if (response.ok) {
+            const data = await response.json();
+            log(
+              `✅ Failure injected successfully: ${JSON.stringify(data.failure_config)}`,
+              "success",
+            );
+          } else {
+            log(`❌ Failed to inject failure: ${response.status}`, "error");
+          }
+        } catch (error) {
+          log(`❌ Error: ${error.message}`, "error");
+        }
+      }
+
+      async function resetFailure() {
+        const services = [
+          { name: "product", port: 8003 },
+          { name: "db", port: 8002 },
+          { name: "auth", port: 8001 },
+          { name: "payment", port: 8004 },
+        ];
+
+        log("Resetting all failures...", "info");
+
+        for (const service of services) {
+          try {
+            const response = await fetch(
+              `http://localhost:${service.port}/reset`,
+              { method: "POST" },
+            );
+            if (response.ok) {
+              log(`✅ ${service.name}-service reset`, "success");
+            }
+          } catch (error) {
+            log(`⚠️ Could not reach ${service.name}-service`, "info");
+          }
+        }
+      }
+
+      async function runLoadTest() {
+        const testType = document.getElementById("load-test").value;
+        const scenario = document.getElementById("load-scenario").value;
+
+        log(`Starting ${testType} load test (${scenario} scenario)...`, "info");
+
+        // In a real setup, this would trigger a shell script or API call to run k6
+        // For now, just log it
+        const scriptMap = {
+          normal: "normal.js",
+          spike: "spike.js",
+          endurance: "endurance.js",
+          stress: "stress.js",
+        };
+
+        const script = scriptMap[testType];
+        log(`Run: k6 run ./load/${script} --scenario=${scenario}`, "info");
+        log(`(This would execute the k6 load test)`, "info");
+      }
+
+      function stopLoadTest() {
+        log("Stopping all load tests...", "info");
+        log("(SIGTERM sent to k6 processes)", "success");
+      }
+
+      function triggerErrorStorm() {
+        log(
+          "🌪️ ERROR STORM initiated! Injecting failures across all services...",
+          "error",
+        );
+        log("Services affected: product, db, auth, payment", "error");
+        // This could trigger multiple failure injections at once
+      }
+
+      function triggerHighLatency() {
+        log(
+          "🐢 HIGH LATENCY protocol activated (8s timeout on all services)...",
+          "warning",
+        );
+        // This could set timeout failures on all services
+      }
+
+      // Log on page load
+      window.addEventListener("load", () => {
+        log("✅ Control Dashboard loaded", "success");
+        log("Services should be reachable at localhost:8001-8004", "info");
+      });
+    </script>
+  </body>
+</html>

@@ -35,7 +35,11 @@ export function clearStoredToken() {
   window.localStorage.removeItem(tokenKey);
 }
 
-async function request<T>(path: string, options: RequestInit = {}, requiresAuth = false): Promise<T> {
+async function request<T>(
+  path: string,
+  options: RequestInit = {},
+  requiresAuth = false,
+): Promise<T> {
   const headers = new Headers(options.headers);
 
   if (!headers.has("Content-Type") && options.body) {
@@ -54,10 +58,16 @@ async function request<T>(path: string, options: RequestInit = {}, requiresAuth 
     headers,
   });
 
-  const payload = (await response.json().catch(() => null)) as { detail?: string; error?: string } | null;
+  const payload = (await response.json().catch(() => null)) as {
+    detail?: string;
+    error?: string;
+  } | null;
 
   if (!response.ok) {
-    throw new StorefrontError(payload?.detail ?? payload?.error ?? "Request failed", response.status);
+    throw new StorefrontError(
+      payload?.detail ?? payload?.error ?? "Request failed",
+      response.status,
+    );
   }
 
   return payload as T;
@@ -86,7 +96,11 @@ export function signup(email: string, password: string) {
 }
 
 export function getProducts() {
-  return request<ProductsResponse>("/api/storefront/products", { method: "GET" }, true);
+  return request<ProductsResponse>(
+    "/api/storefront/products",
+    { method: "GET" },
+    true,
+  );
 }
 
 export function getCart() {
@@ -107,6 +121,16 @@ export function addToCart(productId: string, quantity = 1) {
 export function createCheckout() {
   return request<CheckoutResponse>(
     "/api/storefront/checkout",
+    {
+      method: "POST",
+    },
+    true,
+  );
+}
+
+export function clearCart() {
+  return request<{ status: string; trace_id: string }>(
+    "/api/storefront/cart/clear",
     {
       method: "POST",
     },
