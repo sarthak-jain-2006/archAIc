@@ -14,6 +14,16 @@ data:
         static_configs:
           - targets: ['localhost:9090']
 
+      - job_name: 'archaics-services'
+        metrics_path: /metrics
+        static_configs:
+          - targets:
+              - auth-service.archaics.svc.cluster.local:8001
+              - db-service.archaics.svc.cluster.local:8002
+              - product-service.archaics.svc.cluster.local:8003
+              - ai-operator.archaics.svc.cluster.local:8005
+              - anomaly-detector.archaics.svc.cluster.local:8006
+
       - job_name: 'kubernetes-pods'
         kubernetes_sd_configs:
           - role: pod
