@@ -62,9 +62,9 @@ AI_OPERATOR_URL = os.getenv("AI_OPERATOR_URL", "http://ai-operator:8005")
 POLL_INTERVAL_SEC = 10
 MAX_HISTORY = 360  # 1 hour of data at 1 poll per 10 seconds
 MIN_SAMPLES_FOR_TRAINING = 6  # Start fitting after ~1 minute of data
-CONTAMINATION = 0.15  # More sensitive: 15% expected anomaly rate
-COOLDOWN_SEC = 60 # don't fire anomaly webhook more than once every 60s
-ZSCORE_THRESHOLD = 2.0  # Secondary z-score check for small-scale shifts
+CONTAMINATION = 0.25  # More sensitive: 25% expected anomaly rate
+COOLDOWN_SEC = 20 # don't fire anomaly webhook more than once every 20s
+ZSCORE_THRESHOLD = 1.5  # Secondary z-score check for small-scale shifts
 
 # Store history as a deque of lists: [[error, latency, cpu], ...]
 metric_history = collections.deque(maxlen=MAX_HISTORY)
@@ -187,9 +187,9 @@ async def anomaly_detection_loop():
                 iforest_anomaly = prediction == -1
                 
                 threshold_hit = (
-                    deviations["error_rate"] > 0.001
-                    or deviations["latency_p95"] > 0.01
-                    or deviations["cpu_usage"] > 0.005
+                    deviations["error_rate"] > 0.0005
+                    or deviations["latency_p95"] > 0.005
+                    or deviations["cpu_usage"] > 0.0025
                 )
                 
                 if (iforest_anomaly and threshold_hit) or zscore_anomaly:
@@ -302,9 +302,9 @@ async def inject_metrics(body: InjectMetricsRequest):
 
     if prediction == -1:
         threshold_hit = (
-            deviations["error_rate"] > 0.001
-            or deviations["latency_p95"] > 0.01
-            or deviations["cpu_usage"] > 0.005
+            deviations["error_rate"] > 0.0005
+            or deviations["latency_p95"] > 0.005
+            or deviations["cpu_usage"] > 0.0025
         )
         if threshold_hit:
             culprit = max(deviations, key=deviations.get)

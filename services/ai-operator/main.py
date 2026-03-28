@@ -32,11 +32,11 @@ def _log(level: str, message: str, trace_id: str = "N/A"):
 
 app = FastAPI(title="AI Operator Service", version="1.0.0")
 
-API_KEY = os.environ.get("GOOGLE_API_KEY")
+API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
 if not API_KEY:
-    _log("error", "GOOGLE_API_KEY environment variable is missing")
+    _log("error", "GEMINI_API_KEY environment variable is missing! Gemini calls will fail.")
 else:
-    _log("info", f"Loaded API Key: {API_KEY[:4]}...{API_KEY[-4:]}")
+    _log("info", f"Loaded Gemini API Key: {API_KEY[:4]}...{API_KEY[-4:]}")
 
 client = genai.Client(api_key=API_KEY)
 
@@ -70,7 +70,7 @@ TASK: Output ONLY raw JSON matching this structure:
 
     try:
         response = client.models.generate_content(
-            model='gemini-1.5-flash',
+            model='gemini-2.5-flash',
             contents=prompt,
         )
         
@@ -84,7 +84,7 @@ TASK: Output ONLY raw JSON matching this structure:
                 raw_text = raw_text.strip("`")
         
         ai_response = json.loads(raw_text.strip())
-        _log("info", "Remediation generated successfully", payload.trace_id)
+        _log("info", f"Remediation generated successfully: {json.dumps(ai_response)}", payload.trace_id)
         
         return {
             "status": "success",
