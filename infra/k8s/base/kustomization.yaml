@@ -12,11 +12,7 @@ resources:
   - ai-operator
   - anomaly-detector
 
-secretGenerator:
-  - name: archaics-secrets
-    literals:
-      - jwt-secret=archaIc-secret-key-2024
-      - gemini-api-key=PLACEHOLDER_KEY
+
 
 generatorOptions:
   disableNameSuffixHash: true
